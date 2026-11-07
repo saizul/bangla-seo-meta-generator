@@ -1,0 +1,121 @@
+# bangla-seo-meta-generator
+
+A small Python library and CLI for writing SEO metadata for **Bangla and English** posts. No LLM, no network, no API keys.
+
+- **Grapheme-aware length checks** for titles (about 60) and meta descriptions (about 155) that count what a reader sees, not code points. `বাংলা` is 5 code points but 2 characters.
+- **Bangla to Latin slugs** with a phonetic mapping (vowels, consonants, kar, ফলা, hasanta, nukta forms, digits) and a small loanword dictionary: `ওয়ার্ডপ্রেস এসইও টিপস` becomes `wordpress-seo-tips`. English passes through.
+- **JSON-LD** for `Article` (or `BlogPosting` / `NewsArticle`) and `FAQPage`, from a simple YAML or JSON file. Bangla stays readable in the output.
+- **`check` command**: title and description issues, keyword presence (inflection-aware for Bangla), and readability hints.
+
+## Install
+
+Requires Python 3.9+.
+
+```bash
+pip install .            # or: pip install -e ".[dev]"
+```
+
+## CLI
+
+```bash
+bangla-seo length "ওয়ার্ডপ্রেস সাইট দ্রুত করার ৫টি সহজ উপায়"
+# 27 graphemes (42 code points, 114 bytes) - OK (recommended 20-60)
+
+bangla-seo length "A very long description ..." --kind description
+
+bangla-seo slug "ওয়ার্ডপ্রেস এসইও টিপস ২০২৬"
+# wordpress-seo-tips-2026
+bangla-seo slug "আমি বাংলায় গান গাই"
+# ami-banglay-gan-gai
+bangla-seo slug "Hello, Café World" --max-length 20
+# hello-cafe-world
+
+bangla-seo schema examples/post-bn.yaml --script-tag      # Article + FAQPage
+bangla-seo schema examples/post-en.json --type faq
+bangla-seo schema examples/post-en.json --type article --article-type BlogPosting
+
+bangla-seo check --title "ওয়ার্ডপ্রেস সাইট দ্রুত করার ৫টি সহজ উপায়" \
+                 --description "দ্রুত" --keyword "ওয়ার্ডপ্রেস" \
+                 --body-file examples/body-bn.txt
+```
+
+Output of the last command:
+
+```text
+Title:       27 graphemes
+Description: 2 graphemes
+Body:        23 words, 4 sentences, avg 5.8 words/sentence, ~0.1 min read
+Keyword density: 4.35%
+[WARNING] Description is only 2 graphemes; aim for at least 50.
+[WARNING] Keyword 'ওয়ার্ডপ্রেস' does not appear in the description.
+[INFO   ] The body has 23 words; pages under 300 words rarely rank for competitive queries.
+[WARNING] Keyword density is 4.35% (above 3.0%); it may read as stuffing.
+```
+
+Exit codes: `length` and `check` exit `1` when the text is out of range / has errors, `schema` exits `2` on bad input.
+
+### Schema input
+
+```yaml
+title: ওয়ার্ডপ্রেস সাইট দ্রুত করার ৫টি সহজ উপায়
+description: ...
+url: https://example.com/wordpress-speed-up/
+image: https://example.com/images/speed.webp
+language: bn
+author: { name: Saizul Amin, url: https://saizul.com }   # or just a string
+publisher: { name: Example Blog, logo: https://example.com/logo.png }
+date_published: 2026-01-10
+date_modified: 2026-02-01T09:30:00+06:00
+keywords: [ওয়ার্ডপ্রেস, গতি, ক্যাশ]
+faq:
+  - question: ওয়ার্ডপ্রেস সাইট ধীর হয় কেন?
+    answer: ভারী থিম, অপ্টিমাইজ না করা ছবি এবং ক্যাশ না থাকা সবচেয়ে সাধারণ কারণ।
+```
+
+`title` and `url` are required for Article; `faq` needs at least one question/answer pair for FAQPage. See [`examples/`](examples).
+
+## Library
+
+```python
+from bangla_seo_meta import check, check_length, grapheme_len, slugify, build_article, build_faq, to_script_tag
+
+grapheme_len("বাংলাদেশ")             # 4   (len() says 8)
+check_length("Short title").status   # "short"
+slugify("ব্লগ পোস্টের গাইড")          # "blog-poster-guide"
+
+report = check(
+    title="WordPress Speed Guide: 5 Easy Wins",
+    description="Caching, images and a CDN explained step by step.",
+    keyword="WordPress",
+)
+report.ok, [i.code for i in report.issues]
+
+print(to_script_tag(build_faq({"faq": [{"question": "Why?", "answer": "Because."}]})))
+```
+
+## English example
+
+```bash
+$ bangla-seo check --title "Speed" --keyword wordpress
+Title:       5 graphemes
+[WARNING] Title is only 5 graphemes; aim for at least 20.
+[WARNING] Keyword 'wordpress' does not appear in the title.
+```
+
+## How it works, and its limits
+
+- **Graphemes.** Python's standard library cannot segment grapheme clusters, so `graphemes.py` implements the relevant part of Unicode UAX #29: combining marks (kar, anusvara, visarga, chandrabindu, nukta) and ZWJ/ZWNJ attach to the previous character, and a letter after a hasanta joins the conjunct (`ক্ষ` is one unit). Google actually truncates by **pixel width**, so the limits are guidance; the `check` command adds a hint when a long Bangla title is likely to be cut early because Bangla glyphs are wider than Latin ones. Minimum lengths are lenient since a Bangla grapheme carries more than a Latin letter.
+- **Transliteration** is phonetic and deterministic, built for readable URLs, not linguistic accuracy. Schwa deletion is approximated (final consonants drop the inherent "o"), ya-phala doubles the previous consonant (`সত্য` is `sotto`), and some spellings will differ from what you would pick by hand. Extend `translit.LOANWORDS` for brand names and terms you use often.
+- **Keyword matching** is case-insensitive, never matches inside a conjunct, and tolerates Bangla case endings (`ওয়ার্ডপ্রেস` is found in `ওয়ার্ডপ্রেসের`). Use `count_term(..., strict=True)` for exact grapheme-boundary matches.
+- **Readability** hints are heuristics (sentence length, paragraph length, thin content, keyword density); sentences end at `. ! ?` or the Bangla danda `।`.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+## License
+
+MIT, see [LICENSE](LICENSE). Built by [Saizul Amin](https://saizul.com).

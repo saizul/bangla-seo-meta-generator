@@ -1,0 +1,11 @@
+{
+  "title": "5 Easy Ways to Speed Up a WordPress Site",
+  "description": "Learn how caching, image optimisation and a CDN make a WordPress site faster, step by step.",
+  "url": "https://example.com/speed-up-wordpress/",
+  "language": "en",
+  "author": "Saizul Amin",
+  "date_published": "2026-01-10",
+  "faq": [
+    {"question": "Why is my WordPress site slow?", "answer": "Heavy themes, unoptimised images and missing page caching are the usual causes."}
+  ]
+}
