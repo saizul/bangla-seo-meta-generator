@@ -54,6 +54,26 @@ Keyword density: 4.35%
 [WARNING] Keyword density is 4.35% (above 3.0%); it may read as stuffing.
 ```
 
+### Checking many posts at once
+
+`check` also accepts any number of post files (YAML or JSON) or quoted glob patterns. Each file may define `title`, `description`, `keyword` (or `keywords`, the first one is used), and `body` or `body_file` (a path relative to the post). The files are checked, issues are listed per file, and a summary table follows:
+
+```bash
+bangla-seo check "content/posts/*.yaml"
+bangla-seo check examples/post-bn.yaml examples/post-en.json --json
+```
+
+```text
+File                   Errors  Warnings  Status
+---------------------  ------  --------  ------
+examples/post-bn.yaml  0       0         ok
+examples/post-en.json  0       0         ok
+
+2 file(s) checked, 0 with errors, 0 warning(s).
+```
+
+The command exits `1` if any file has an error or cannot be read, which makes it suitable for CI. `--title`, `--description`, `--keyword` and `--body-file` cannot be combined with file arguments.
+
 Exit codes: `length` and `check` exit `1` when the text is out of range / has errors, `schema` exits `2` on bad input.
 
 ### Schema input
