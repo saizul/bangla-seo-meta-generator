@@ -1,5 +1,7 @@
 # bangla-seo-meta-generator
 
+[![CI](https://github.com/saizul/bangla-seo-meta-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/saizul/bangla-seo-meta-generator/actions/workflows/ci.yml) ![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white) ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+
 A small Python library and CLI for writing SEO metadata for **Bangla and English** posts. No LLM, no network, no API keys.
 
 - **Grapheme-aware length checks** for titles (about 60) and meta descriptions (about 155) that count what a reader sees, not code points. `বাংলা` is 5 code points but 2 characters.
