@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import __version__
+from .batch import check_files, format_summary
 from .checks import ERROR, check
 from .length import LIMITS, check_length
 from .schema import SchemaError, build_article, build_faq, load_input, to_json, to_script_tag
@@ -47,7 +48,32 @@ def _cmd_schema(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_check_files(args: argparse.Namespace) -> int:
+    if any(v for v in (args.title, args.description, args.keyword, args.body_file)):
+        print("error: --title/--description/--keyword/--body-file cannot be combined with FILE arguments", file=sys.stderr)
+        return 2
+    results = check_files(args.files)
+    if args.json:
+        print(json.dumps({"ok": all(r.ok for r in results), "files": [r.to_dict() for r in results]},
+                         ensure_ascii=False, indent=2))
+    else:
+        for r in results:
+            if not r.error and not r.report.issues:
+                continue
+            print(f"{r.path}:")
+            if r.error:
+                print(f"  [ERROR  ] {r.error}")
+            else:
+                for issue in r.report.issues:
+                    print(f"  [{issue.level.upper():7}] {issue.message}")
+        print()
+        print(format_summary(results))
+    return 0 if all(r.ok for r in results) else 1
+
+
 def _cmd_check(args: argparse.Namespace) -> int:
+    if args.files:
+        return _cmd_check_files(args)
     body = _read_text(args.body_file) if args.body_file else None
     report = check(args.title, args.description, args.keyword, body)
     if args.json:
@@ -96,6 +122,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_schema)
 
     p = sub.add_parser("check", help="report title/description issues, keyword presence and readability hints")
+    p.add_argument("files", nargs="*", metavar="FILE",
+                   help="YAML/JSON post files or glob patterns (title, description, keyword, body or body_file); "
+                        "prints a summary table and exits 1 if any file has errors")
     p.add_argument("--title")
     p.add_argument("--description")
     p.add_argument("--keyword")
