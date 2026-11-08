@@ -76,6 +76,26 @@ The command exits `1` if any file has an error or cannot be read, which makes it
 
 Exit codes: `length` and `check` exit `1` when the text is out of range / has errors, `schema` exits `2` on bad input.
 
+### Markdown posts with front matter
+
+`check` and `schema` also read Markdown files whose metadata lives in a YAML front matter block (Hugo, Jekyll and Astro style). The text below the block is used as the `body`, unless the front matter sets `body` or `body_file` itself:
+
+```markdown
+---
+title: ওয়ার্ডপ্রেস সাইট দ্রুত করার ৫টি সহজ উপায়
+description: ...
+keywords: [ওয়ার্ডপ্রেস, গতি]
+---
+
+Post content starts here...
+```
+
+```bash
+bangla-seo check "content/posts/*.md"
+```
+
+A `.md` / `.markdown` file without a closing `---` fence is reported as an error rather than silently skipped.
+
 ### Schema input
 
 ```yaml

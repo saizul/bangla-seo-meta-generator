@@ -16,11 +16,39 @@ class SchemaError(ValueError):
     """Raised when the input is missing a field the requested schema needs."""
 
 
+MARKDOWN_SUFFIXES = (".md", ".markdown")
+
+
+def split_front_matter(text: str, path: Union[str, Path] = "<input>") -> Dict[str, Any]:
+    """Parse ``---`` delimited YAML front matter from Markdown text.
+
+    The text after the closing delimiter is exposed as ``body`` unless the front
+    matter already defines one. Raises ``SchemaError`` when there is no front matter.
+    """
+    lines = text.lstrip("\ufeff").splitlines(keepends=True)
+    if not lines or lines[0].rstrip() != "---":
+        raise SchemaError(f"{path} has no YAML front matter (expected a leading '---' line)")
+    for end in range(1, len(lines)):
+        if lines[end].rstrip() in ("---", "..."):
+            break
+    else:
+        raise SchemaError(f"{path} has unterminated YAML front matter (missing closing '---')")
+    data = yaml.safe_load("".join(lines[1:end])) or {}
+    if not isinstance(data, dict):
+        raise SchemaError(f"{path} front matter must be a mapping")
+    if data.get("body") is None and not data.get("body_file"):
+        data["body"] = "".join(lines[end + 1:]).strip()
+    return data
+
+
 def load_input(path: Union[str, Path]) -> Dict[str, Any]:
-    """Read a ``.json`` file, or YAML for any other extension."""
+    """Read a ``.json`` file, Markdown front matter (``.md``), or YAML for any other extension."""
     path = Path(path)
     text = path.read_text(encoding="utf-8")
-    data = json.loads(text) if path.suffix.lower() == ".json" else yaml.safe_load(text)
+    suffix = path.suffix.lower()
+    if suffix in MARKDOWN_SUFFIXES:
+        return split_front_matter(text, path)
+    data = json.loads(text) if suffix == ".json" else yaml.safe_load(text)
     if not isinstance(data, dict):
         raise SchemaError(f"{path} must contain a mapping at the top level")
     return data
