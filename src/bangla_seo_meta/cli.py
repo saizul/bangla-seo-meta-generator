@@ -88,7 +88,12 @@ def _cmd_check(args: argparse.Namespace) -> int:
             print(f"Body:        {r.words} words, {r.sentences} sentences, "
                   f"avg {r.avg_sentence_words} words/sentence, ~{r.reading_minutes} min read")
             if r.keyword_density is not None:
-                print(f"Keyword density: {r.keyword_density}%")
+                line = f"Keyword density: {r.keyword_density}%"
+                if r.keyword_density_content is not None:
+                    line += f" of all words, {r.keyword_density_content}% of {r.content_words} content words (stopwords removed)"
+                print(line)
+            if r.top_terms:
+                print("Top terms:   " + ", ".join(f"{t.term} ({t.count})" for t in r.top_terms))
         for issue in report.issues:
             print(f"[{issue.level.upper():7}] {issue.message}")
         if not report.issues:
