@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import re
 import string
+import unicodedata
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .graphemes import count_term
 from .length import check_length
+from .stopwords import content_words
 
 ERROR, WARNING, INFO = "error", "warning", "info"
 
@@ -21,6 +24,7 @@ MAX_PARAGRAPH_WORDS = 120
 THIN_CONTENT_WORDS = 300
 MAX_KEYWORD_DENSITY = 3.0  # percent
 WORDS_PER_MINUTE = 200
+TOP_TERMS = 5
 
 
 @dataclass
@@ -31,6 +35,12 @@ class Issue:
 
 
 @dataclass
+class TermCount:
+    term: str
+    count: int
+
+
+@dataclass
 class Readability:
     words: int = 0
     sentences: int = 0
@@ -38,6 +48,9 @@ class Readability:
     longest_sentence_words: int = 0
     reading_minutes: float = 0.0
     keyword_density: Optional[float] = None
+    content_words: int = 0  # words left after removing Bangla/English stopwords and numbers
+    keyword_density_content: Optional[float] = None  # density measured against content_words
+    top_terms: List[TermCount] = field(default_factory=list)  # most repeated content words
 
 
 @dataclass
@@ -75,8 +88,16 @@ def analyze_readability(text: str, keyword: Optional[str] = None) -> Readability
         longest_sentence_words=max(lengths, default=0),
         reading_minutes=round(len(words) / WORDS_PER_MINUTE, 1),
     )
+    keyword_words = split_words(keyword) if keyword else []
+    content = content_words(words, keep=keyword_words)
+    stats.content_words = len(content)
+    counts = Counter(unicodedata.normalize("NFC", w).casefold() for w in content)
+    stats.top_terms = [TermCount(term, n) for term, n in counts.most_common(TOP_TERMS) if n > 1]
     if keyword and words:
-        stats.keyword_density = round(count_term(text, keyword) * len(split_words(keyword)) * 100 / len(words), 2)
+        occurrences = count_term(text, keyword) * len(keyword_words)
+        stats.keyword_density = round(occurrences * 100 / len(words), 2)
+        if content:
+            stats.keyword_density_content = round(occurrences * 100 / len(content), 2)
     return stats
 
 

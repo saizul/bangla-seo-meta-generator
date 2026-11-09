@@ -7,7 +7,7 @@ A small Python library and CLI for writing SEO metadata for **Bangla and English
 - **Grapheme-aware length checks** for titles (about 60) and meta descriptions (about 155) that count what a reader sees, not code points. `বাংলা` is 5 code points but 2 characters.
 - **Bangla to Latin slugs** with a phonetic mapping (vowels, consonants, kar, ফলা, hasanta, nukta forms, digits) and a small loanword dictionary: `ওয়ার্ডপ্রেস এসইও টিপস` becomes `wordpress-seo-tips`. English passes through.
 - **JSON-LD** for `Article` (or `BlogPosting` / `NewsArticle`) and `FAQPage`, from a simple YAML or JSON file. Bangla stays readable in the output.
-- **`check` command**: title and description issues, keyword presence (inflection-aware for Bangla), and readability hints.
+- **`check` command**: title and description issues, keyword presence (inflection-aware for Bangla), stopword-aware keyword density with top terms, and readability hints.
 
 ## Install
 
@@ -47,7 +47,7 @@ Output of the last command:
 Title:       27 graphemes
 Description: 2 graphemes
 Body:        23 words, 4 sentences, avg 5.8 words/sentence, ~0.1 min read
-Keyword density: 4.35%
+Keyword density: 4.35% of all words, 6.25% of 16 content words (stopwords removed)
 [WARNING] Description is only 2 graphemes; aim for at least 50.
 [WARNING] Keyword 'ওয়ার্ডপ্রেস' does not appear in the description.
 [INFO   ] The body has 23 words; pages under 300 words rarely rank for competitive queries.
@@ -149,6 +149,7 @@ Title:       5 graphemes
 - **Graphemes.** Python's standard library cannot segment grapheme clusters, so `graphemes.py` implements the relevant part of Unicode UAX #29: combining marks (kar, anusvara, visarga, chandrabindu, nukta) and ZWJ/ZWNJ attach to the previous character, and a letter after a hasanta joins the conjunct (`ক্ষ` is one unit). Google actually truncates by **pixel width**, so the limits are guidance; the `check` command adds a hint when a long Bangla title is likely to be cut early because Bangla glyphs are wider than Latin ones. Minimum lengths are lenient since a Bangla grapheme carries more than a Latin letter.
 - **Transliteration** is phonetic and deterministic, built for readable URLs, not linguistic accuracy. Schwa deletion is approximated (final consonants drop the inherent "o"), ya-phala doubles the previous consonant (`সত্য` is `sotto`), and some spellings will differ from what you would pick by hand. Extend `translit.LOANWORDS` for brand names and terms you use often.
 - **Keyword matching** is case-insensitive, never matches inside a conjunct, and tolerates Bangla case endings (`ওয়ার্ডপ্রেস` is found in `ওয়ার্ডপ্রেসের`). Use `count_term(..., strict=True)` for exact grapheme-boundary matches.
+- **Keyword density** is reported two ways: against all words (this drives the stuffing warning) and against content words only, after removing common Bangla and English function words (`এবং`, `জন্য`, `the`, `of` ...) and bare numbers. With a body, `check` also lists the most repeated content words (`Top terms`) so you can see what the text is really about. The stopword list is short and matched exactly (no stemming); extend `bangla_seo_meta.stopwords.STOPWORDS` for your niche. In JSON output these are `content_words`, `keyword_density_content` and `top_terms`.
 - **Readability** hints are heuristics (sentence length, paragraph length, thin content, keyword density); sentences end at `. ! ?` or the Bangla danda `।`.
 
 ## Development
