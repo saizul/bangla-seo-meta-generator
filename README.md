@@ -162,3 +162,13 @@ pytest
 ## License
 
 MIT, see [LICENSE](LICENSE). Built by [Saizul Amin](https://saizul.com).
+
+## Run with Docker
+
+A multi-arch image (amd64, arm64) is published to GitHub Container Registry on every change to `main`, so you can run the tool without installing Python:
+
+```bash
+docker run --rm -v "$PWD:/work" ghcr.io/saizul/bangla-seo-meta-generator:latest --help
+```
+
+Mount the folder that holds your input files (and where reports should be written) at `/work`.
