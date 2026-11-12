@@ -7,6 +7,7 @@ A small Python library and CLI for writing SEO metadata for **Bangla and English
 - **Grapheme-aware length checks** for titles (about 60) and meta descriptions (about 155) that count what a reader sees, not code points. `বাংলা` is 5 code points but 2 characters.
 - **Bangla to Latin slugs** with a phonetic mapping (vowels, consonants, kar, ফলা, hasanta, nukta forms, digits) and a small loanword dictionary: `ওয়ার্ডপ্রেস এসইও টিপস` becomes `wordpress-seo-tips`. English passes through.
 - **JSON-LD** for `Article` (or `BlogPosting` / `NewsArticle`) and `FAQPage`, from a simple YAML or JSON file. Bangla stays readable in the output.
+- **Head meta tags**: `<title>`, meta description, canonical link, Open Graph (including `article:*` and `og:locale`) and Twitter/X card tags from the same post file, shortened on grapheme boundaries so a conjunct is never cut in half.
 - **`check` command**: title and description issues, keyword presence (inflection-aware for Bangla), stopword-aware keyword density with top terms, and readability hints.
 
 ## Install
@@ -35,6 +36,9 @@ bangla-seo slug "Hello, Café World" --max-length 20
 bangla-seo schema examples/post-bn.yaml --script-tag      # Article + FAQPage
 bangla-seo schema examples/post-en.json --type faq
 bangla-seo schema examples/post-en.json --type article --article-type BlogPosting
+
+bangla-seo meta examples/post-bn.yaml --site-name "Example Blog" --twitter-site @example
+bangla-seo meta examples/post-bn.yaml --with-schema > head.html   # tags + JSON-LD in one go
 
 bangla-seo check --title "ওয়ার্ডপ্রেস সাইট দ্রুত করার ৫টি সহজ উপায়" \
                  --description "দ্রুত" --keyword "ওয়ার্ডপ্রেস" \
@@ -74,7 +78,7 @@ examples/post-en.json  0       0         ok
 
 The command exits `1` if any file has an error or cannot be read, which makes it suitable for CI. `--title`, `--description`, `--keyword` and `--body-file` cannot be combined with file arguments.
 
-Exit codes: `length` and `check` exit `1` when the text is out of range / has errors, `schema` exits `2` on bad input.
+Exit codes: `length` and `check` exit `1` when the text is out of range / has errors, `schema` and `meta` exit `2` on bad input.
 
 ### Markdown posts with front matter
 
@@ -116,10 +120,39 @@ faq:
 
 `title` and `url` are required for Article; `faq` needs at least one question/answer pair for FAQPage. See [`examples/`](examples).
 
+### Head meta tags (Open Graph and Twitter cards)
+
+`meta` reads the same YAML, JSON or Markdown file as `schema` and prints the tags for the page `<head>`:
+
+```bash
+bangla-seo meta examples/post-bn.yaml --site-name "Example Blog" \
+    --twitter-site @example --title-template "{title} | {site_name}"
+```
+
+```html
+<title>ওয়ার্ডপ্রেস সাইট দ্রুত করার ৫টি সহজ উপায় | Example Blog</title>
+<meta name="description" content="ওয়ার্ডপ্রেস সাইটের গতি বাড়াতে ক্যাশ, ছবি অপ্টিমাইজেশন ও CDN কীভাবে ব্যবহার করবেন, তা ধাপে ধাপে জানুন।">
+<link rel="canonical" href="https://example.com/wordpress-speed-up/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ওয়ার্ডপ্রেস সাইট দ্রুত করার ৫টি সহজ উপায়">
+...
+<meta property="og:locale" content="bn_BD">
+<meta property="og:image" content="https://example.com/images/speed.webp">
+<meta property="article:published_time" content="2026-01-10">
+<meta property="article:tag" content="ওয়ার্ডপ্রেস">
+...
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@example">
+```
+
+Besides the schema fields it understands `site_name`, `og_type` (default `article` when the post has an author or dates, otherwise `website`), `locale` (else derived from `language`: `bn` becomes `bn_BD`, `bn-IN` becomes `bn_IN`), `robots`, `image` as either a URL or `{url, alt}`, `image_alt`, and `twitter: {site, creator, card}`. `url` and `image` must be absolute http(s) URLs; handles may be written as `example`, `@example` or a profile URL.
+
+Text is shortened per slot, by graphemes and at a word break where possible: 60 for `<title>`, 155 for the meta description, 95 / 70 for the Open Graph / Twitter titles and 200 for their descriptions. With `--title-template` only the title part is shortened, so the site name suffix stays. Each shortening is reported as a `note:` on stderr; `--no-shorten` turns it off. `--with-schema` appends the Article (and FAQPage, when `faq` is set) JSON-LD, and `--json` prints everything as JSON instead of HTML.
+
 ## Library
 
 ```python
-from bangla_seo_meta import check, check_length, grapheme_len, slugify, build_article, build_faq, to_script_tag
+from bangla_seo_meta import check, check_length, grapheme_len, slugify, build_article, build_faq, build_meta, to_script_tag, truncate
 
 grapheme_len("বাংলাদেশ")             # 4   (len() says 8)
 check_length("Short title").status   # "short"
@@ -131,6 +164,9 @@ report = check(
     keyword="WordPress",
 )
 report.ok, [i.code for i in report.issues]
+
+truncate("ওয়ার্ডপ্রেস সাইট দ্রুত করার ৫টি সহজ উপায়", 20)   # "ওয়ার্ডপ্রেস সাইট দ্রুত করার…"
+print(build_meta({"title": "বাংলা পোস্ট", "language": "bn"}, site_name="Example Blog").to_html())
 
 print(to_script_tag(build_faq({"faq": [{"question": "Why?", "answer": "Because."}]})))
 ```

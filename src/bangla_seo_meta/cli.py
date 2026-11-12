@@ -12,6 +12,7 @@ from . import __version__
 from .batch import check_files, format_summary
 from .checks import ERROR, check
 from .length import LIMITS, check_length
+from .meta import build_meta
 from .schema import SchemaError, build_article, build_faq, load_input, to_json, to_script_tag
 from .translit import slugify
 
@@ -45,6 +46,33 @@ def _cmd_schema(args: argparse.Namespace) -> int:
         return 2
     render = to_script_tag if args.script_tag else to_json
     print("\n".join(render(s) for s in schemas))
+    return 0
+
+
+def _cmd_meta(args: argparse.Namespace) -> int:
+    try:
+        data = load_input(args.file)
+        result = build_meta(data, site_name=args.site_name, twitter_site=args.twitter_site,
+                            title_template=args.title_template, shorten=not args.no_shorten)
+        schemas = []
+        if args.with_schema:
+            schemas.append(build_article(data, args.article_type))
+            if data.get("faq"):
+                schemas.append(build_faq(data))
+    except (SchemaError, OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        payload = result.to_dict()
+        if schemas:
+            payload["schema"] = schemas
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(result.to_html())
+        for schema in schemas:
+            print(to_script_tag(schema))
+        for note in result.notes:
+            print(f"note: {note}", file=sys.stderr)
     return 0
 
 
@@ -125,6 +153,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--article-type", default="Article", help="e.g. BlogPosting or NewsArticle")
     p.add_argument("--script-tag", action="store_true", help='wrap output in <script type="application/ld+json">')
     p.set_defaults(func=_cmd_schema)
+
+    p = sub.add_parser("meta", help="generate <title>, description, canonical, Open Graph and Twitter card tags")
+    p.add_argument("file", help="YAML, JSON or Markdown (front matter) post file")
+    p.add_argument("--site-name", help="og:site_name (overrides site_name in the file)")
+    p.add_argument("--twitter-site", help="twitter:site handle, e.g. @example (overrides twitter.site)")
+    p.add_argument("--title-template", help='format for the <title> element, e.g. "{title} | {site_name}"')
+    p.add_argument("--no-shorten", action="store_true", help="keep long titles and descriptions as they are")
+    p.add_argument("--with-schema", action="store_true", help="also emit Article (and FAQPage when faq is set) JSON-LD")
+    p.add_argument("--article-type", default="Article", help="schema type used with --with-schema")
+    p.add_argument("--json", action="store_true", help="print the tags as JSON instead of HTML")
+    p.set_defaults(func=_cmd_meta)
 
     p = sub.add_parser("check", help="report title/description issues, keyword presence and readability hints")
     p.add_argument("files", nargs="*", metavar="FILE",
