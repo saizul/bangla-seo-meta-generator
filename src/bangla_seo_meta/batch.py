@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import glob
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from .checks import ERROR, WARNING, CheckReport, check
+from .duplicates import SIMILAR_TITLE_THRESHOLD, DuplicateGroup, Post, find_duplicates, issues_for
 from .schema import SchemaError, load_input
 
 _GLOB_CHARS = set("*?[")
@@ -18,6 +19,7 @@ class FileResult:
     path: str
     report: Optional[CheckReport] = None
     error: Optional[str] = None  # set when the file could not be read or parsed
+    post: Optional[Post] = field(default=None, repr=False)  # fields used by the cross-file checks
 
     @property
     def errors(self) -> int:
@@ -79,27 +81,43 @@ def check_file(path: str) -> FileResult:
         body = data.get("body")
         if body is None and data.get("body_file"):
             body = (Path(path).parent / str(data["body_file"])).read_text(encoding="utf-8")
-        report = check(
-            _str(data.get("title")),
-            _str(data.get("description")),
-            _keyword(data),
-            _str(body),
-        )
+        title, description, keyword = _str(data.get("title")), _str(data.get("description")), _keyword(data)
+        report = check(title, description, keyword, _str(body))
+        post = Post(path, title, description, _str(data.get("url")), _str(data.get("slug")), keyword)
     except FileNotFoundError:
         return FileResult(path, error="file not found")
     except (SchemaError, OSError, ValueError, UnicodeDecodeError) as exc:
         return FileResult(path, error=str(exc).splitlines()[0] if str(exc) else type(exc).__name__)
     except Exception as exc:  # malformed YAML raises yaml.YAMLError, which is not a ValueError
         return FileResult(path, error=f"invalid file: {type(exc).__name__}")
-    return FileResult(path, report=report)
+    return FileResult(path, report=report, post=post)
 
 
 def _str(value: Any) -> Optional[str]:
     return None if value is None else str(value)
 
 
-def check_files(patterns: Sequence[str]) -> List[FileResult]:
-    return [check_file(p) for p in expand_paths(patterns)]
+def check_files(patterns: Sequence[str], duplicates: bool = True,
+                similar_threshold: float = SIMILAR_TITLE_THRESHOLD) -> List[FileResult]:
+    """Check every file; with ``duplicates`` also compare the posts with each other.
+
+    Cross-file findings are appended to each affected file's report, so a duplicate
+    URL or slug (an error) makes that file fail.
+    """
+    results = [check_file(p) for p in expand_paths(patterns)]
+    if duplicates:
+        add_duplicate_issues(results, similar_threshold)
+    return results
+
+
+def add_duplicate_issues(results: Sequence[FileResult],
+                         similar_threshold: float = SIMILAR_TITLE_THRESHOLD) -> List[DuplicateGroup]:
+    """Run :func:`find_duplicates` over the readable files and attach the issues."""
+    groups = find_duplicates([r.post for r in results if r.post is not None], similar_threshold)
+    for r in results:
+        if r.report is not None:
+            r.report.issues.extend(issues_for(r.path, groups))
+    return groups
 
 
 def format_summary(results: Sequence[FileResult]) -> str:

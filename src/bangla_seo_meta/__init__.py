@@ -1,6 +1,7 @@
 """SEO metadata helpers for Bangla and English posts."""
 
 from .checks import CheckReport, Issue, check
+from .duplicates import DuplicateGroup, Post, find_duplicates
 from .graphemes import count_term, grapheme_len, graphemes
 from .length import LengthReport, check_length
 from .meta import MetaResult, Tag, build_meta, truncate
@@ -13,9 +14,11 @@ __version__ = "0.1.0"
 __all__ = [
     "STOPWORDS",
     "CheckReport",
+    "DuplicateGroup",
     "Issue",
     "LengthReport",
     "MetaResult",
+    "Post",
     "SchemaError",
     "Tag",
     "build_article",
@@ -24,6 +27,7 @@ __all__ = [
     "check",
     "check_length",
     "content_words",
+    "find_duplicates",
     "count_term",
     "grapheme_len",
     "graphemes",
