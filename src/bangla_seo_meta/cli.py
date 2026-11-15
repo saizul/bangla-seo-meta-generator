@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import __version__
-from .batch import check_files, format_summary
+from .batch import add_duplicate_issues, check_files, format_summary
 from .checks import ERROR, check
+from .duplicates import SIMILAR_TITLE_THRESHOLD
 from .length import LIMITS, check_length
 from .meta import build_meta
 from .schema import SchemaError, build_article, build_faq, load_input, to_json, to_script_tag
@@ -80,10 +81,13 @@ def _cmd_check_files(args: argparse.Namespace) -> int:
     if any(v for v in (args.title, args.description, args.keyword, args.body_file)):
         print("error: --title/--description/--keyword/--body-file cannot be combined with FILE arguments", file=sys.stderr)
         return 2
-    results = check_files(args.files)
+    results = check_files(args.files, duplicates=False)
+    groups = [] if args.no_duplicates else add_duplicate_issues(results, args.similar_titles)
     if args.json:
-        print(json.dumps({"ok": all(r.ok for r in results), "files": [r.to_dict() for r in results]},
-                         ensure_ascii=False, indent=2))
+        payload = {"ok": all(r.ok for r in results), "files": [r.to_dict() for r in results]}
+        if not args.no_duplicates:
+            payload["duplicates"] = [g.to_dict() for g in groups]
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         for r in results:
             if not r.error and not r.report.issues:
@@ -96,6 +100,11 @@ def _cmd_check_files(args: argparse.Namespace) -> int:
                     print(f"  [{issue.level.upper():7}] {issue.message}")
         print()
         print(format_summary(results))
+        if groups:
+            counts = {}
+            for g in groups:
+                counts[g.kind] = counts.get(g.kind, 0) + 1
+            print("Cross-file: " + ", ".join(f"{n} shared {kind}" for kind, n in counts.items()) + ".")
     return 0 if all(r.ok for r in results) else 1
 
 
@@ -127,6 +136,16 @@ def _cmd_check(args: argparse.Namespace) -> int:
         if not report.issues:
             print("No issues found.")
     return 0 if report.ok else 1
+
+
+def _threshold(value: str) -> float:
+    try:
+        ratio = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {value!r}") from None
+    if ratio <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return ratio
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -174,6 +193,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--keyword")
     p.add_argument("--body-file", help="plain-text article body ('-' for stdin)")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--no-duplicates", action="store_true",
+                   help="with FILE arguments: skip the cross-file duplicate title/description/URL/slug checks")
+    p.add_argument("--similar-titles", type=_threshold, default=SIMILAR_TITLE_THRESHOLD, metavar="RATIO",
+                   help="flag titles sharing at least this share of content words (0-1, default %(default)s; "
+                        "above 1 disables it)")
     p.set_defaults(func=_cmd_check)
     return parser
 

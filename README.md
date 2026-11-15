@@ -8,11 +8,11 @@ A small Python library and CLI for writing SEO metadata for **Bangla and English
 - **Bangla to Latin slugs** with a phonetic mapping (vowels, consonants, kar, ফলা, hasanta, nukta forms, digits) and a small loanword dictionary: `ওয়ার্ডপ্রেস এসইও টিপস` becomes `wordpress-seo-tips`. English passes through.
 - **JSON-LD** for `Article` (or `BlogPosting` / `NewsArticle`) and `FAQPage`, from a simple YAML or JSON file. Bangla stays readable in the output.
 - **Head meta tags**: `<title>`, meta description, canonical link, Open Graph (including `article:*` and `og:locale`) and Twitter/X card tags from the same post file, shortened on grapheme boundaries so a conjunct is never cut in half.
-- **`check` command**: title and description issues, keyword presence (inflection-aware for Bangla), stopword-aware keyword density with top terms, and readability hints.
+- **`check` command**: title and description issues, cross-file duplicate titles, descriptions, URLs and slugs, keyword presence (inflection-aware for Bangla), stopword-aware keyword density with top terms, and readability hints.
 
 ## Install
 
-Requires Python 3.9+.
+Requires Python 3.10+.
 
 ```bash
 pip install .            # or: pip install -e ".[dev]"
@@ -77,6 +77,29 @@ examples/post-en.json  0       0         ok
 ```
 
 The command exits `1` if any file has an error or cannot be read, which makes it suitable for CI. `--title`, `--description`, `--keyword` and `--body-file` cannot be combined with file arguments.
+
+### Duplicates across posts
+
+When `check` is given files, it also compares the posts with each other, because a post that is fine on its own can still collide with another one:
+
+| Finding | Level | Matched on |
+| --- | --- | --- |
+| `duplicate-url` | error | `url`, ignoring host case, `#fragment`, default ports and a trailing slash |
+| `duplicate-slug` | error | `slug`, else the last segment of `url`, else the transliterated title (`ওয়ার্ডপ্রেস এসইও টিপস` and `WordPress SEO Tips` collide) |
+| `duplicate-title` | warning | the title after NFC normalisation, case folding, whitespace collapsing and trimming trailing punctuation (including `।`) |
+| `duplicate-description` | warning | the description, normalised the same way |
+| `duplicate-similar-title` | info | titles sharing at least 80% of their content words (Jaccard, stopwords removed) |
+| `duplicate-keyword` | info | the same primary keyword in several posts (possible cannibalisation) |
+
+Each finding is listed under every file involved and names the other files; a summary line such as `Cross-file: 1 shared url, 1 shared slug.` follows the table. With `--json` the groups are also returned under `duplicates`. Because duplicate URLs and slugs are errors, they make the command exit `1`.
+
+```bash
+bangla-seo check "content/posts/*.md" --similar-titles 0.7   # stricter near-duplicate check
+bangla-seo check "content/posts/*.md" --similar-titles 1.1   # turn the near-duplicate check off
+bangla-seo check "content/posts/*.md" --no-duplicates        # per-file checks only
+```
+
+The same comparison is available from Python as `find_duplicates([Post(path, title, description, url, slug, keyword), ...])`.
 
 Exit codes: `length` and `check` exit `1` when the text is out of range / has errors, `schema` and `meta` exit `2` on bad input.
 
